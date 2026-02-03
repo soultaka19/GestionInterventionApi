@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+using FluentValidation;
+using FluentValidation.AspNetCore;
 using GestionInterventionApi.Data;
 using GestionInterventionApi.Services;
 using GestionInterventionApi.Middleware;
@@ -23,6 +25,10 @@ builder.Services.AddScoped<ITenantService, TenantService>();
 
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(Program).Assembly);
+
+// FluentValidation
+builder.Services.AddFluentValidationAutoValidation();
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
 var app = builder.Build();
 
