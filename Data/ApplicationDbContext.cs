@@ -20,6 +20,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<TechnicianLocation> TechnicianLocations => Set<TechnicianLocation>();
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<Equipment> Equipments => Set<Equipment>();
+    public DbSet<Intervention> Interventions => Set<Intervention>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -99,6 +100,40 @@ public class ApplicationDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(e => e.OrganizationId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Configuration Intervention
+        modelBuilder.Entity<Intervention>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Type).HasConversion<string>();
+            entity.Property(e => e.Status).HasConversion<string>();
+            entity.Property(e => e.Description).HasMaxLength(500);
+
+            entity.HasOne(e => e.Client)
+                .WithMany()
+                .HasForeignKey(e => e.ClientId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.Equipment)
+                .WithMany()
+                .HasForeignKey(e => e.EquipmentId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.Technician)
+                .WithMany()
+                .HasForeignKey(e => e.TechnicianId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.Organization)
+                .WithMany()
+                .HasForeignKey(e => e.OrganizationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Index pour les requêtes fréquentes
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.ScheduledDate);
+            entity.HasIndex(e => e.TechnicianId);
         });
 
         // Configuration globale pour les entités multi-tenant
