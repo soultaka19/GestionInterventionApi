@@ -1,0 +1,6 @@
+@GestionInterventionApi_HostAddress = http://localhost:5218
+
+GET {{GestionInterventionApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
