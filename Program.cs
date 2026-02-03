@@ -1,22 +1,46 @@
+using Microsoft.EntityFrameworkCore;
+using Serilog;
+using GestionInterventionApi.Data;
+using GestionInterventionApi.Services;
+using GestionInterventionApi.Middleware;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// Configuration Serilog
+builder.Host.UseSerilog((context, configuration) =>
+    configuration.ReadFrom.Configuration(context.Configuration));
 
+// Add services to the container
 builder.Services.AddControllers();
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+
+// Configuration Entity Framework Core avec SQL Server
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Services Multi-tenant
+builder.Services.AddScoped<ITenantService, TenantService>();
+
+// AutoMapper
+builder.Services.AddAutoMapper(typeof(Program).Assembly);
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
 
+app.UseSerilogRequestLogging();
+
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
 app.UseAuthorization();
+
+// Middleware Multi-tenant (après l'authentification)
+app.UseTenantMiddleware();
 
 app.MapControllers();
 
