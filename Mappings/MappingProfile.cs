@@ -23,10 +23,12 @@ public class MappingProfile : Profile
         CreateMap<UpdateUserDto, User>();
 
         // Client
+        // Correction ici : Utilisation de ForCtorParam pour les records
         CreateMap<Client, ClientDto>()
-            .ForMember(dest => dest.EquipmentCount, opt => opt.MapFrom(src => src.Equipments.Count));
-        CreateMap<Client, ClientDetailDto>()
-            .ForMember(dest => dest.Equipments, opt => opt.MapFrom(src => src.Equipments));
+            .ForCtorParam("EquipmentCount", opt => opt.MapFrom(src => src.Equipments != null ? src.Equipments.Count : 0));
+
+        CreateMap<Client, ClientDetailDto>();
+
         CreateMap<CreateClientDto, Client>();
         CreateMap<UpdateClientDto, Client>();
 

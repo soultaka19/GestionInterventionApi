@@ -17,19 +17,31 @@ public class ClientsController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly IMapper _mapper;
     private readonly IGeocodingService _geocodingService;
+    private readonly ITenantService _tenantService;
 
-    public ClientsController(ApplicationDbContext context, IMapper mapper, IGeocodingService geocodingService)
+    public ClientsController(
+        ApplicationDbContext context,
+        IMapper mapper,
+        IGeocodingService geocodingService,
+        ITenantService tenantService)
     {
         _context = context;
         _mapper = mapper;
         _geocodingService = geocodingService;
+        _tenantService = tenantService;
     }
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<ClientDto>>> GetAll([FromQuery] string? search = null)
     {
+        if (!_tenantService.OrganizationId.HasValue)
+        {
+            return Unauthorized(new { message = "Organisation non identifiée" });
+        }
+
         var query = _context.Clients
             .Include(c => c.Equipments)
+            .Where(c => c.OrganizationId == _tenantService.OrganizationId.Value)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -48,9 +60,14 @@ public class ClientsController : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ClientDetailDto>> GetById(Guid id)
     {
+        if (!_tenantService.OrganizationId.HasValue)
+        {
+            return Unauthorized(new { message = "Organisation non identifiée" });
+        }
+
         var client = await _context.Clients
             .Include(c => c.Equipments)
-            .FirstOrDefaultAsync(c => c.Id == id);
+            .FirstOrDefaultAsync(c => c.Id == id && c.OrganizationId == _tenantService.OrganizationId.Value);
 
         if (client == null)
         {
@@ -63,8 +80,15 @@ public class ClientsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<ClientDto>> Create([FromBody] CreateClientDto createDto)
     {
-        var client = _mapper.Map<Client>(createDto);
+        if (!_tenantService.OrganizationId.HasValue)
+        {
+            return Unauthorized(new { message = "Organisation non identifiée" });
+        }
+
+        var 
+            client = _mapper.Map<Client>(createDto);
         client.Id = Guid.NewGuid();
+        client.OrganizationId = _tenantService.OrganizationId.Value;
 
         // Géocodage automatique si les coordonnées ne sont pas fournies
         if (!client.Latitude.HasValue || !client.Longitude.HasValue)
@@ -89,7 +113,13 @@ public class ClientsController : ControllerBase
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<ClientDto>> Update(Guid id, [FromBody] UpdateClientDto updateDto)
     {
-        var client = await _context.Clients.FindAsync(id);
+        if (!_tenantService.OrganizationId.HasValue)
+        {
+            return Unauthorized(new { message = "Organisation non identifiée" });
+        }
+
+        var client = await _context.Clients
+            .FirstOrDefaultAsync(c => c.Id == id && c.OrganizationId == _tenantService.OrganizationId.Value);
 
         if (client == null)
         {
@@ -123,7 +153,13 @@ public class ClientsController : ControllerBase
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id)
     {
-        var client = await _context.Clients.FindAsync(id);
+        if (!_tenantService.OrganizationId.HasValue)
+        {
+            return Unauthorized(new { message = "Organisation non identifiée" });
+        }
+
+        var client = await _context.Clients
+            .FirstOrDefaultAsync(c => c.Id == id && c.OrganizationId == _tenantService.OrganizationId.Value);
 
         if (client == null)
         {
@@ -139,9 +175,14 @@ public class ClientsController : ControllerBase
     [HttpGet("{id:guid}/equipments")]
     public async Task<ActionResult<IEnumerable<object>>> GetClientEquipments(Guid id)
     {
+        if (!_tenantService.OrganizationId.HasValue)
+        {
+            return Unauthorized(new { message = "Organisation non identifiée" });
+        }
+
         var client = await _context.Clients
             .Include(c => c.Equipments)
-            .FirstOrDefaultAsync(c => c.Id == id);
+            .FirstOrDefaultAsync(c => c.Id == id && c.OrganizationId == _tenantService.OrganizationId.Value);
 
         if (client == null)
         {

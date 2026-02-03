@@ -11,6 +11,6 @@ public record ClientDto(
     double? Latitude,
     double? Longitude,
     string? Notes,
-    int EquipmentCount,
+    int EquipmentCount, // Doit correspondre au nom dans ForCtorParam
     DateTime CreatedAt
 );
