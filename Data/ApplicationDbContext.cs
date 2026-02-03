@@ -18,6 +18,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<User> Users => Set<User>();
     public DbSet<TechnicianLocation> TechnicianLocations => Set<TechnicianLocation>();
+    public DbSet<Client> Clients => Set<Client>();
+    public DbSet<Equipment> Equipments => Set<Equipment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -60,6 +62,43 @@ public class ApplicationDbContext : DbContext
                 .WithOne()
                 .HasForeignKey<TechnicianLocation>(e => e.TechnicianId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Configuration Client
+        modelBuilder.Entity<Client>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Address).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.City).HasMaxLength(100);
+            entity.Property(e => e.PostalCode).HasMaxLength(10);
+            entity.Property(e => e.Phone).HasMaxLength(20);
+            entity.Property(e => e.Email).HasMaxLength(256);
+
+            entity.HasOne(e => e.Organization)
+                .WithMany()
+                .HasForeignKey(e => e.OrganizationId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Configuration Equipment
+        modelBuilder.Entity<Equipment>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Type).HasConversion<string>();
+            entity.Property(e => e.Brand).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Model).HasMaxLength(50);
+            entity.Property(e => e.SerialNumber).HasMaxLength(50);
+
+            entity.HasOne(e => e.Client)
+                .WithMany(c => c.Equipments)
+                .HasForeignKey(e => e.ClientId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Organization)
+                .WithMany()
+                .HasForeignKey(e => e.OrganizationId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // Configuration globale pour les entités multi-tenant
