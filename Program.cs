@@ -9,6 +9,7 @@ using GestionInterventionApi.Data;
 using GestionInterventionApi.Services;
 using GestionInterventionApi.Middleware;
 using GestionInterventionApi.Hubs;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -103,6 +104,8 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.MapScalarApiReference();
+   
 }
 
 app.UseSerilogRequestLogging();

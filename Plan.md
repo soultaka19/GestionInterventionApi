@@ -47,3 +47,4 @@
     - `ScheduledDate` (Date seule), `Status` (Pending, InProgress, Completed).
     - `ReportJson` : Contient la checklist fixe, les URLs des photos et les coordonnées de la signature 
 fin du fichier
+
