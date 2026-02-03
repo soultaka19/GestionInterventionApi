@@ -14,9 +14,38 @@ public class ApplicationDbContext : DbContext
         _tenantService = tenantService;
     }
 
+    // DbSets
+    public DbSet<Organization> Organizations => Set<Organization>();
+    public DbSet<User> Users => Set<User>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // Configuration Organization
+        modelBuilder.Entity<Organization>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.SubscriptionPlan).HasConversion<string>();
+        });
+
+        // Configuration User
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Email).IsRequired().HasMaxLength(256);
+            entity.HasIndex(e => e.Email).IsUnique();
+            entity.Property(e => e.PasswordHash).IsRequired();
+            entity.Property(e => e.FirstName).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.LastName).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Role).HasConversion<string>();
+
+            entity.HasOne(e => e.Organization)
+                .WithMany(o => o.Users)
+                .HasForeignKey(e => e.OrganizationId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
 
         // Configuration globale pour les entités multi-tenant
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
