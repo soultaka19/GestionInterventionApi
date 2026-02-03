@@ -17,6 +17,7 @@ public class ApplicationDbContext : DbContext
     // DbSets
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<User> Users => Set<User>();
+    public DbSet<TechnicianLocation> TechnicianLocations => Set<TechnicianLocation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -45,6 +46,20 @@ public class ApplicationDbContext : DbContext
                 .WithMany(o => o.Users)
                 .HasForeignKey(e => e.OrganizationId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Configuration TechnicianLocation
+        modelBuilder.Entity<TechnicianLocation>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.TechnicianId).IsUnique();
+            entity.Property(e => e.Latitude).IsRequired();
+            entity.Property(e => e.Longitude).IsRequired();
+
+            entity.HasOne(e => e.Technician)
+                .WithOne()
+                .HasForeignKey<TechnicianLocation>(e => e.TechnicianId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // Configuration globale pour les entités multi-tenant

@@ -8,6 +8,7 @@ using FluentValidation.AspNetCore;
 using GestionInterventionApi.Data;
 using GestionInterventionApi.Services;
 using GestionInterventionApi.Middleware;
+using GestionInterventionApi.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,6 +19,9 @@ builder.Host.UseSerilog((context, configuration) =>
 // Add services to the container
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
+
+// Configuration SignalR
+builder.Services.AddSignalR();
 
 // Configuration Entity Framework Core avec SQL Server
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -42,6 +46,23 @@ builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(
             Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
     };
+
+    // Configuration pour SignalR - permet le token via query string
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            {
+                context.Token = accessToken;
+            }
+
+            return Task.CompletedTask;
+        }
+    };
 });
 
 builder.Services.AddAuthorization();
@@ -52,12 +73,29 @@ builder.Services.AddScoped<ITenantService, TenantService>();
 // Services Application
 builder.Services.AddScoped<IAuthService, AuthService>();
 
+// Services Géolocalisation
+builder.Services.AddScoped<ILocationTrackingService, LocationTrackingService>();
+builder.Services.AddHttpClient<IGeocodingService, GeocodingService>();
+builder.Services.AddHttpClient<IRouteOptimizationService, RouteOptimizationService>();
+
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(Program).Assembly);
 
 // FluentValidation
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+
+// CORS pour SignalR (ajuster selon vos besoins)
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("SignalRPolicy", policy =>
+    {
+        policy.AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials()
+              .SetIsOriginAllowed(_ => true); // En production, spécifier les origines autorisées
+    });
+});
 
 var app = builder.Build();
 
@@ -71,6 +109,8 @@ app.UseSerilogRequestLogging();
 
 app.UseHttpsRedirection();
 
+app.UseCors("SignalRPolicy");
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -78,5 +118,8 @@ app.UseAuthorization();
 app.UseTenantMiddleware();
 
 app.MapControllers();
+
+// Map SignalR Hub
+app.MapHub<LocationHub>("/hubs/location");
 
 app.Run();
