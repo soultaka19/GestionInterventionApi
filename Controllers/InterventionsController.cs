@@ -212,9 +212,11 @@ public class InterventionsController : ControllerBase
         if (intervention.Status != InterventionStatus.Scheduled && intervention.Status != InterventionStatus.Pending)
             return BadRequest(new { message = "L'intervention ne peut pas être démarrée" });
 
-        // Vérifier que c'est le bon technicien
+        // Vérifier que c'est le bon technicien ou un Admin/Planificateur
         var userId = GetUserId();
-        if (intervention.TechnicianId != userId)
+        var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+        var isAdminOrPlanificateur = userRole == nameof(UserRole.Admin) || userRole == nameof(UserRole.Planificateur);
+        if (intervention.TechnicianId != userId && !isAdminOrPlanificateur)
             return Forbid();
 
         intervention.Status = InterventionStatus.InProgress;
@@ -239,6 +241,13 @@ public class InterventionsController : ControllerBase
 
         if (intervention.Status != InterventionStatus.InProgress)
             return BadRequest(new { message = "L'intervention doit être en cours pour être complétée" });
+
+        // Vérifier que c'est le bon technicien ou un Admin/Planificateur
+        var userId = GetUserId();
+        var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+        var isAdminOrPlanificateur = userRole == nameof(UserRole.Admin) || userRole == nameof(UserRole.Planificateur);
+        if (intervention.TechnicianId != userId && !isAdminOrPlanificateur)
+            return Forbid();
 
         intervention.Status = InterventionStatus.Completed;
         intervention.CompletedAt = DateTime.UtcNow;
@@ -344,18 +353,18 @@ public class InterventionsController : ControllerBase
         if (technicianId.HasValue)
             query = query.Where(i => i.TechnicianId == technicianId.Value);
 
-        var interventions = await query.ToListAsync();
+        var interventions = await query
+            .OrderBy(i => i.ScheduledDate)
+            .ThenBy(i => i.ScheduledStartTime)
+            .ToListAsync();
 
-        var planning = interventions
-            .GroupBy(i => i.ScheduledDate?.Date)
-            .Select(g => new
-            {
-                Date = g.Key,
-                Interventions = g.Select(MapToDto).ToList()
-            })
-            .OrderBy(x => x.Date);
-
-        return Ok(planning);
+        return Ok(new
+        {
+            StartDate = startDate.ToString("yyyy-MM-dd"),
+            EndDate = endDate.ToString("yyyy-MM-dd"),
+            Interventions = interventions.Select(MapToDto),
+            TotalCount = interventions.Count
+        });
     }
 
     [HttpGet("statuses")]
@@ -388,6 +397,8 @@ public class InterventionsController : ControllerBase
             i.ClientId,
             i.Client.Name,
             i.Client.Address,
+            i.Client.Latitude,
+            i.Client.Longitude,
             i.EquipmentId,
             i.Equipment != null ? $"{i.Equipment.Type} - {i.Equipment.Brand}" : null,
             i.TechnicianId,

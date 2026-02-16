@@ -7,6 +7,8 @@ public record InterventionDto(
     Guid ClientId,
     string ClientName,
     string ClientAddress,
+    double? ClientLatitude,
+    double? ClientLongitude,
     Guid? EquipmentId,
     string? EquipmentInfo,
     Guid? TechnicianId,
