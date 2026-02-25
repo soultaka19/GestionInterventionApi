@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using GestionInterventionApi.DTOs.Location;
+using GestionInterventionApi.Hubs;
 using GestionInterventionApi.Services;
 
 namespace GestionInterventionApi.Controllers;
@@ -14,15 +16,18 @@ public class LocationController : ControllerBase
     private readonly ILocationTrackingService _locationService;
     private readonly IGeocodingService _geocodingService;
     private readonly IRouteOptimizationService _routeService;
+    private readonly IHubContext<LocationHub> _hubContext;
 
     public LocationController(
         ILocationTrackingService locationService,
         IGeocodingService geocodingService,
-        IRouteOptimizationService routeService)
+        IRouteOptimizationService routeService,
+        IHubContext<LocationHub> hubContext)
     {
         _locationService = locationService;
         _geocodingService = geocodingService;
         _routeService = routeService;
+        _hubContext = hubContext;
     }
 
     /// <summary>
@@ -39,7 +44,27 @@ public class LocationController : ControllerBase
             return Unauthorized();
         }
 
-        await _locationService.UpdateLocationAsync(userId.Value, orgId.Value, locationDto);
+        // Allow Admin to simulate a specific technician's location
+        var targetUserId = userId.Value;
+        if (locationDto.TechnicianId.HasValue)
+        {
+            var userRole = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+            if (userRole == nameof(Models.Enums.UserRole.Admin) || userRole == nameof(Models.Enums.UserRole.Planificateur))
+            {
+                targetUserId = locationDto.TechnicianId.Value;
+            }
+        }
+
+        await _locationService.UpdateLocationAsync(targetUserId, orgId.Value, locationDto);
+
+        // Broadcast via SignalR so connected clients get real-time updates
+        var technicianLocation = await _locationService.GetTechnicianLocationAsync(targetUserId);
+        if (technicianLocation != null)
+        {
+            await _hubContext.Clients.Group($"org_{orgId.Value}")
+                .SendAsync("LocationUpdated", technicianLocation);
+        }
+
         return Ok(new { message = "Location updated" });
     }
 
