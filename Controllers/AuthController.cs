@@ -18,14 +18,21 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginDto loginDto)
     {
-        var result = await _authService.LoginAsync(loginDto);
-
-        if (result == null)
+        try
         {
-            return Unauthorized(new { message = "Email ou mot de passe incorrect" });
-        }
+            var result = await _authService.LoginAsync(loginDto);
 
-        return Ok(result);
+            if (result == null)
+            {
+                return Unauthorized(new { message = "Email ou mot de passe incorrect" });
+            }
+
+            return Ok(result);
+        }
+        catch (Exception)
+        {
+            return StatusCode(500, new { message = "Erreur du serveur, veuillez réessayer dans quelques instants" });
+        }
     }
 
     [HttpPost("register")]
