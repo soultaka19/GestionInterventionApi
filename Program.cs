@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -24,9 +24,46 @@ builder.Services.AddOpenApi();
 // Configuration SignalR
 builder.Services.AddSignalR();
 
-// Configuration Entity Framework Core avec SQL Server
+// ---------------------------------------------------------------------------
+// Validation de la configuration au demarrage.
+//
+// Avant : `builder.Configuration["Jwt:Key"]!` — l'operateur null-forgiving
+// promettait au compilateur une valeur presente. Avec une variable absente,
+// l'application demarrait quand meme et signait ses jetons avec une chaine
+// vide : n'importe qui pouvait forger un jeton valide, sans le moindre message
+// d'erreur. Un echec au demarrage est preferable a une faille silencieuse.
+//
+// Les secrets ne vivent plus dans appsettings.json (depot public) mais dans
+// l'environnement : Jwt__Key, ConnectionStrings__DefaultConnection.
+// ---------------------------------------------------------------------------
+var jwtKey = builder.Configuration["Jwt:Key"];
+if (string.IsNullOrWhiteSpace(jwtKey) || Encoding.UTF8.GetByteCount(jwtKey) < 32)
+{
+    throw new InvalidOperationException(
+        "Jwt:Key absente ou trop courte : HMAC-SHA256 exige au moins 32 octets. " +
+        "Definir la variable d'environnement Jwt__Key (voir appsettings.example.json). " +
+        "Generer une valeur avec : openssl rand -base64 48");
+}
+
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException(
+        "ConnectionStrings:DefaultConnection absente. Definir la variable "
+        + "d'environnement ConnectionStrings__DefaultConnection "
+        + "(voir appsettings.example.json).");
+}
+
+// Configuration Entity Framework Core avec PostgreSQL.
+//
+// Migre de SQL Server vers Npgsql : SQL Server sur Linux exige 2 Go de RAM a lui
+// seul, plus que les six autres projets du portfolio reunis. PostgreSQL rejoint
+// l'instance partagee du VPS. Aucune donnee n'a ete perdue au passage : la base
+// Azure SQL d'origine n'existe plus.
+//
+// La chaine vient de l'environnement en production (ConnectionStrings__DefaultConnection).
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(connectionString));
 
 // Configuration JWT Authentication
 builder.Services.AddAuthentication(options =>
@@ -45,7 +82,7 @@ builder.Services.AddAuthentication(options =>
         ValidIssuer = builder.Configuration["Jwt:Issuer"],
         ValidAudience = builder.Configuration["Jwt:Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+            Encoding.UTF8.GetBytes(jwtKey))
     };
 
     // Configuration pour SignalR - permet le token via query string
