@@ -1,4 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
+﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -143,29 +143,58 @@ public class AuthService : IAuthService
         return Convert.ToBase64String(hashBytes);
     }
 
+    // Parametres PBKDF2, nommes une seule fois : HashPassword et VerifyPassword
+    // les partageaient auparavant sous forme de litteraux disperses.
+    //
+    // 100 000 iterations correspondent a la recommandation OWASP de 2021 ; celle
+    // de 2023 est de 600 000 pour PBKDF2-HMAC-SHA256. Monter ce nombre invalide
+    // les hash existants : la bascule demande une re-derivation a la prochaine
+    // connexion reussie, non faite ici (voir README, dette assumee).
+    private const int Iterations = 100000;
+    private const int TailleSel = 16;
+    private const int TailleHash = 32;
+
     private static bool VerifyPassword(string password, string passwordHash)
     {
-        var hashBytes = Convert.FromBase64String(passwordHash);
+        // B-13 (1/2) — un hash absent ou corrompu levait une FormatException
+        // remontee en 500 nu. On repond « mot de passe invalide », ce qui est
+        // vrai et ne distingue pas un compte casse d'un mot de passe faux.
+        byte[] hashBytes;
+        try
+        {
+            hashBytes = Convert.FromBase64String(passwordHash);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
 
-        var salt = new byte[16];
-        Array.Copy(hashBytes, 0, salt, 0, 16);
+        if (hashBytes.Length != TailleSel + TailleHash)
+        {
+            return false;
+        }
+
+        var salt = new byte[TailleSel];
+        Array.Copy(hashBytes, 0, salt, 0, TailleSel);
 
         var hash = Rfc2898DeriveBytes.Pbkdf2(
             password,
             salt,
-            iterations: 100000,
+            iterations: Iterations,
             hashAlgorithm: HashAlgorithmName.SHA256,
-            outputLength: 32
+            outputLength: TailleHash
         );
 
-        for (int i = 0; i < 32; i++)
-        {
-            if (hashBytes[i + 16] != hash[i])
-            {
-                return false;
-            }
-        }
-
-        return true;
+        // B-13 (2/2) — comparaison a temps constant.
+        //
+        // La boucle precedente sortait au PREMIER octet different : le temps de
+        // reponse renseignait sur le nombre d'octets corrects devines, ce qui
+        // permet en theorie de reconstruire un hash octet par octet. Le cout de
+        // PBKDF2 (100 000 iterations) noie largement cet ecart en pratique, mais
+        // une comparaison a temps constant est gratuite — il n'y a aucune raison
+        // de laisser la fuite ouverte.
+        return CryptographicOperations.FixedTimeEquals(
+            hashBytes.AsSpan(TailleSel, TailleHash),
+            hash);
     }
 }

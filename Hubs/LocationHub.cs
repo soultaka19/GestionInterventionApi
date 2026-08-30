@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using GestionInterventionApi.DTOs.Location;
 using GestionInterventionApi.Services;
@@ -36,11 +36,11 @@ public class LocationHub : Hub
         var userId = GetUserId();
         if (userId.HasValue)
         {
-            await _locationService.SetTechnicianOfflineAsync(userId.Value);
-
             var organizationId = GetOrganizationId();
             if (organizationId.HasValue)
             {
+                await _locationService.SetTechnicianOfflineAsync(userId.Value, organizationId.Value);
+
                 // Notifier les autres utilisateurs que le technicien est hors ligne
                 await Clients.Group($"org_{organizationId}")
                     .SendAsync("TechnicianOffline", userId.Value);
@@ -68,7 +68,7 @@ public class LocationHub : Hub
         await _locationService.UpdateLocationAsync(userId.Value, organizationId.Value, locationDto);
 
         // Récupérer les infos complètes pour broadcast
-        var technicianLocation = await _locationService.GetTechnicianLocationAsync(userId.Value);
+        var technicianLocation = await _locationService.GetTechnicianLocationAsync(userId.Value, organizationId.Value);
 
         if (technicianLocation != null)
         {
@@ -83,16 +83,35 @@ public class LocationHub : Hub
     /// </summary>
     public async Task SubscribeToTechnician(Guid technicianId)
     {
+        // B-2 — c'etait le chemin exploitable : tout utilisateur authentifie
+        // connaissant un GUID recevait la position ET le nom d'un technicien de
+        // n'importe quelle organisation. On refuse desormais l'abonnement lui-meme
+        // quand le technicien n'est pas dans l'organisation de l'appelant : sans
+        // ce controle, l'abonnement au groupe `tech_{id}` survivrait au refus de
+        // lecture et livrerait les diffusions ulterieures.
+        var organizationId = GetOrganizationId();
+        if (!organizationId.HasValue)
+        {
+            await Clients.Caller.SendAsync("Error", "Organization not found");
+            return;
+        }
+
+        var location = await _locationService.GetTechnicianLocationAsync(technicianId, organizationId.Value);
+        if (location == null)
+        {
+            _logger.LogWarning(
+                "Abonnement refuse : l'utilisateur {UserId} a demande le technicien "
+                + "{TechnicianId}, hors de son organisation {OrgId}",
+                Context.UserIdentifier, technicianId, organizationId);
+            await Clients.Caller.SendAsync("Error", "Technician not found");
+            return;
+        }
+
         await Groups.AddToGroupAsync(Context.ConnectionId, $"tech_{technicianId}");
         _logger.LogInformation("User {UserId} subscribed to technician {TechnicianId}",
             Context.UserIdentifier, technicianId);
 
-        // Envoyer la dernière position connue
-        var location = await _locationService.GetTechnicianLocationAsync(technicianId);
-        if (location != null)
-        {
-            await Clients.Caller.SendAsync("LocationUpdated", location);
-        }
+        await Clients.Caller.SendAsync("LocationUpdated", location);
     }
 
     /// <summary>

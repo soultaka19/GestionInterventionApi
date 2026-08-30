@@ -1,4 +1,4 @@
-using AutoMapper;
+﻿using AutoMapper;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -78,6 +78,7 @@ public class ClientsController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = "Gestion")]
     public async Task<ActionResult<ClientDto>> Create([FromBody] CreateClientDto createDto)
     {
         if (!_tenantService.OrganizationId.HasValue)
@@ -111,6 +112,7 @@ public class ClientsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = "Gestion")]
     public async Task<ActionResult<ClientDto>> Update(Guid id, [FromBody] UpdateClientDto updateDto)
     {
         if (!_tenantService.OrganizationId.HasValue)
@@ -151,6 +153,7 @@ public class ClientsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = "Gestion")]
     public async Task<IActionResult> Delete(Guid id)
     {
         if (!_tenantService.OrganizationId.HasValue)

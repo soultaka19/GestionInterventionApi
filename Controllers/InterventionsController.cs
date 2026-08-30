@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Text.Json;
 using AutoMapper;
 using Microsoft.AspNetCore.Authorization;
@@ -77,6 +77,7 @@ public class InterventionsController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = "Gestion")]
     public async Task<ActionResult<InterventionDto>> Create([FromBody] CreateInterventionDto createDto)
     {
         // Vérifier que le client existe
@@ -131,6 +132,7 @@ public class InterventionsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = "Gestion")]
     public async Task<ActionResult<InterventionDto>> Update(Guid id, [FromBody] UpdateInterventionDto updateDto)
     {
         var intervention = await _context.Interventions
@@ -161,6 +163,7 @@ public class InterventionsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/assign")]
+    [Authorize(Policy = "Gestion")]
     public async Task<ActionResult<InterventionDto>> AssignTechnician(Guid id, [FromBody] AssignTechnicianDto assignDto)
     {
         var intervention = await _context.Interventions
@@ -272,6 +275,7 @@ public class InterventionsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/cancel")]
+    [Authorize(Policy = "Gestion")]
     public async Task<ActionResult<InterventionDto>> CancelIntervention(Guid id, [FromBody] string? reason = null)
     {
         var intervention = await _context.Interventions
@@ -296,6 +300,7 @@ public class InterventionsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = "Gestion")]
     public async Task<IActionResult> Delete(Guid id)
     {
         var intervention = await _context.Interventions.FindAsync(id);

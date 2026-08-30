@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -55,10 +55,16 @@ public class LocationController : ControllerBase
             }
         }
 
-        await _locationService.UpdateLocationAsync(targetUserId, orgId.Value, locationDto);
+        // Le service refuse un technicien hors de l'organisation : on repond 404
+        // plutot qu'un 200 mensonger, et sans reveler si le GUID existe ailleurs.
+        var ecrit = await _locationService.UpdateLocationAsync(targetUserId, orgId.Value, locationDto);
+        if (!ecrit)
+        {
+            return NotFound(new { message = "Technician not found" });
+        }
 
         // Broadcast via SignalR so connected clients get real-time updates
-        var technicianLocation = await _locationService.GetTechnicianLocationAsync(targetUserId);
+        var technicianLocation = await _locationService.GetTechnicianLocationAsync(targetUserId, orgId.Value);
         if (technicianLocation != null)
         {
             await _hubContext.Clients.Group($"org_{orgId.Value}")
@@ -74,7 +80,13 @@ public class LocationController : ControllerBase
     [HttpGet("technician/{technicianId:guid}")]
     public async Task<ActionResult<TechnicianLocationDto>> GetTechnicianLocation(Guid technicianId)
     {
-        var location = await _locationService.GetTechnicianLocationAsync(technicianId);
+        var orgId = GetOrganizationId();
+        if (!orgId.HasValue)
+        {
+            return Unauthorized();
+        }
+
+        var location = await _locationService.GetTechnicianLocationAsync(technicianId, orgId.Value);
 
         if (location == null)
         {

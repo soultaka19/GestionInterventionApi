@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -21,8 +22,16 @@ builder.Host.UseSerilog((context, configuration) =>
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
-// Configuration SignalR
-builder.Services.AddSignalR();
+// Configuration SignalR.
+//
+// TenantHubFilter renseigne l'organisation courante avant chaque invocation :
+// sans lui, le scope de dependances d'une methode de hub ignore le tenant
+// (voir Hubs/TenantHubFilter.cs).
+builder.Services.AddSignalR(options =>
+{
+    options.AddFilter<TenantHubFilter>();
+});
+builder.Services.AddSingleton<TenantHubFilter>();
 
 // ---------------------------------------------------------------------------
 // Validation de la configuration au demarrage.
@@ -103,7 +112,29 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-builder.Services.AddAuthorization();
+// ---------------------------------------------------------------------------
+// Autorisation par role (B-4).
+//
+// Avant : aucune policy, aucun [Authorize(Roles=...)]. Le seul controle etait
+// inline dans start/complete. Un compte Technicien pouvait donc creer et
+// desactiver des comptes, supprimer clients, equipements et interventions.
+//
+// Le nom du role vient de la revendication ClaimTypes.Role posee par
+// AuthService.GenerateJwtToken, ou il vaut le nom de l'enum UserRole.
+// ---------------------------------------------------------------------------
+builder.Services.AddAuthorization(options =>
+{
+    // Ecriture sur les donnees metier : clients, equipements, interventions.
+    options.AddPolicy("Gestion", policy =>
+        policy.RequireRole(
+            nameof(GestionInterventionApi.Models.Enums.UserRole.Admin),
+            nameof(GestionInterventionApi.Models.Enums.UserRole.Planificateur)));
+
+    // Cycle de vie des comptes : reserve a l'Admin. Un Planificateur organise le
+    // travail, il n'administre pas les acces.
+    options.AddPolicy("AdministrationComptes", policy =>
+        policy.RequireRole(nameof(GestionInterventionApi.Models.Enums.UserRole.Admin)));
+});
 
 // Services Multi-tenant
 builder.Services.AddScoped<ITenantService, TenantService>();
@@ -123,15 +154,30 @@ builder.Services.AddAutoMapper(typeof(Program).Assembly);
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
-// CORS pour SignalR (ajuster selon vos besoins)
+// ---------------------------------------------------------------------------
+// CORS (B-14).
+//
+// Avant : `SetIsOriginAllowed(_ => true)` combine a `AllowCredentials()`.
+// ASP.NET Core interdit `AllowAnyOrigin()` avec des credentials ; ce predicat
+// contournait l'interdiction en RENVOYANT l'en-tete Origin de l'appelant, quel
+// qu'il soit, avec `Access-Control-Allow-Credentials: true`. N'importe quel site
+// pouvait donc emettre des requetes authentifiees et negocier SignalR. Le
+// commentaire « en production, specifier les origines » n'a jamais ete suivi.
+//
+// Desormais : liste blanche lue dans la configuration (Cors:AllowedOrigins,
+// separees par des virgules), avec repli sur le front local en developpement.
+// Aucune valeur par defaut permissive.
+var originesAutorisees = (builder.Configuration["Cors:AllowedOrigins"] ?? "http://localhost:4200")
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("SignalRPolicy", policy =>
     {
-        policy.AllowAnyHeader()
+        policy.WithOrigins(originesAutorisees)
+              .AllowAnyHeader()
               .AllowAnyMethod()
-              .AllowCredentials()
-              .SetIsOriginAllowed(_ => true); // En production, spécifier les origines autorisées
+              .AllowCredentials();
     });
 });
 

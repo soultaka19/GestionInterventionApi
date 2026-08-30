@@ -1,4 +1,4 @@
-using AutoMapper;
+﻿using AutoMapper;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -73,6 +73,7 @@ public class EquipmentsController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = "Gestion")]
     public async Task<ActionResult<EquipmentDto>> Create([FromBody] CreateEquipmentDto createDto)
     {
         // Vérifier que le client existe
@@ -96,6 +97,7 @@ public class EquipmentsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = "Gestion")]
     public async Task<ActionResult<EquipmentDto>> Update(Guid id, [FromBody] UpdateEquipmentDto updateDto)
     {
         var equipment = await _context.Equipments
@@ -114,6 +116,7 @@ public class EquipmentsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = "Gestion")]
     public async Task<IActionResult> Delete(Guid id)
     {
         var equipment = await _context.Equipments.FindAsync(id);
@@ -130,6 +133,7 @@ public class EquipmentsController : ControllerBase
     }
 
     [HttpPatch("{id:guid}/maintenance")]
+    [Authorize(Policy = "Gestion")]
     public async Task<ActionResult<EquipmentDto>> UpdateMaintenanceDate(Guid id)
     {
         var equipment = await _context.Equipments

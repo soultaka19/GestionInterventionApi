@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using GestionInterventionApi.Models;
 using GestionInterventionApi.Services;
 
@@ -152,8 +152,24 @@ public class ApplicationDbContext : DbContext
 
     private void ApplyTenantQueryFilter<T>(ModelBuilder modelBuilder) where T : class, ITenantEntity
     {
+        // FAIL-CLOSED. Le filtre disait auparavant :
+        //     _tenantService.OrganizationId == null || e.OrganizationId == ...
+        // c'est-a-dire : « si je ne sais pas a quelle organisation appartient
+        // l'appelant, montre-lui TOUT ». Or le TenantMiddleware n'agit que sur le
+        // pipeline HTTP : une invocation de methode SignalR s'execute dans un
+        // scope DI neuf ou OrganizationId vaut null. Un utilisateur authentifie
+        // connaissant un GUID pouvait ainsi lire la position et le nom d'un
+        // technicien de n'importe quelle organisation.
+        //
+        // Desormais, un tenant inconnu ne voit RIEN : la comparaison avec un
+        // Guid? nul ne satisfait aucune ligne cote SQL.
+        //
+        // Les deux chemins qui doivent legitimement voir hors tenant (login et
+        // register, qui cherchent un utilisateur avant de connaitre son
+        // organisation) passent deja par IgnoreQueryFilters() : ils ne
+        // dependaient pas de cette ouverture.
         modelBuilder.Entity<T>().HasQueryFilter(e =>
-            _tenantService.OrganizationId == null || e.OrganizationId == _tenantService.OrganizationId);
+            e.OrganizationId == _tenantService.OrganizationId);
     }
 
     public override int SaveChanges()
