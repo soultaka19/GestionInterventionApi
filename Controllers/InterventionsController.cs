@@ -147,15 +147,55 @@ public class InterventionsController : ControllerBase
         if (intervention.Status == InterventionStatus.Completed || intervention.Status == InterventionStatus.Cancelled)
             return BadRequest(new { message = "Impossible de modifier une intervention terminée ou annulée" });
 
-        intervention.EquipmentId = updateDto.EquipmentId;
-        intervention.TechnicianId = updateDto.TechnicianId;
+        // F-3 / B-7 — une mise a jour n'efface plus ce qu'elle ne mentionne pas.
+        //
+        // Chaque champ etait recopie tel quel, y compris a null. Le formulaire
+        // d'edition du front n'envoie ni technicianId ni planification :
+        // corriger une simple faute de frappe dans la description desaffectait
+        // le technicien et effacait la date, l'heure de debut et l'heure de fin.
+        // L'intervention repassait donc silencieusement de « Planifiee » a
+        // « En attente », sans qu'aucune erreur ne soit affichee.
+        //
+        // Contrepartie assumee, identique a celle du mapping AutoMapper : vider
+        // un champ optionnel demande une action dediee (desaffectation), non un
+        // null glisse dans une mise a jour.
+
+        // Les references changees doivent rester dans l'organisation, comme a la
+        // creation — l'audit relevait qu'Update ne faisait aucun de ces controles.
+        if (updateDto.EquipmentId.HasValue && updateDto.EquipmentId != intervention.EquipmentId)
+        {
+            var equipementValide = await _context.Equipments
+                .AnyAsync(e => e.Id == updateDto.EquipmentId.Value && e.ClientId == intervention.ClientId);
+            if (!equipementValide)
+                return BadRequest(new { message = "Équipement non trouvé ou n'appartient pas au client" });
+        }
+
+        if (updateDto.TechnicianId.HasValue && updateDto.TechnicianId != intervention.TechnicianId)
+        {
+            var technicienValide = await _context.Users
+                .AnyAsync(u => u.Id == updateDto.TechnicianId.Value && u.Role == UserRole.Technicien);
+            if (!technicienValide)
+                return BadRequest(new { message = "Technicien non trouvé" });
+        }
+
+        if (updateDto.EquipmentId.HasValue)
+            intervention.EquipmentId = updateDto.EquipmentId;
+        if (updateDto.TechnicianId.HasValue)
+            intervention.TechnicianId = updateDto.TechnicianId;
+        // Type est un enum non nullable : toujours fourni par le formulaire.
         intervention.Type = updateDto.Type;
-        intervention.Description = updateDto.Description;
-        intervention.ScheduledDate = updateDto.ScheduledDate;
-        intervention.ScheduledStartTime = updateDto.ScheduledStartTime;
-        intervention.ScheduledEndTime = updateDto.ScheduledEndTime;
-        intervention.EstimatedDurationMinutes = updateDto.EstimatedDurationMinutes;
-        intervention.Notes = updateDto.Notes;
+        if (updateDto.Description is not null)
+            intervention.Description = updateDto.Description;
+        if (updateDto.ScheduledDate.HasValue)
+            intervention.ScheduledDate = updateDto.ScheduledDate;
+        if (updateDto.ScheduledStartTime.HasValue)
+            intervention.ScheduledStartTime = updateDto.ScheduledStartTime;
+        if (updateDto.ScheduledEndTime.HasValue)
+            intervention.ScheduledEndTime = updateDto.ScheduledEndTime;
+        if (updateDto.EstimatedDurationMinutes.HasValue)
+            intervention.EstimatedDurationMinutes = updateDto.EstimatedDurationMinutes;
+        if (updateDto.Notes is not null)
+            intervention.Notes = updateDto.Notes;
 
         await _context.SaveChangesAsync();
 
