@@ -1,0 +1,18 @@
+# Artefacts de compilation : recompiles dans l'image, et leur copie casserait
+# le cache a chaque build local.
+bin/
+obj/
+publish/
+publish-deploy/
+*.zip
+
+# Secrets et configuration locale — appsettings.json ne contient plus rien de
+# secret (B-1), mais appsettings.Development.json reste une affaire de poste.
+appsettings.Development.json
+*.user
+
+.git/
+.vs/
+.idea/
+Logs/
+*.md

@@ -1,0 +1,40 @@
+# TechMaint sur le socle partage.
+#
+# Ne contient que l'API : le front Angular est servi par Vercel, PostgreSQL et
+# Caddy sont mutualises entre les sept projets du portfolio.
+#
+# Le service s'appelle `techmaint-api`, jamais `api` : le reseau `socle` publie
+# un alias par nom de service, deux projets se marcheraient dessus.
+#
+# Migrations : appliquees a la main apres le premier demarrage.
+#   docker compose -f deploy/docker-compose.socle.yml exec techmaint-api \
+#     dotnet GestionInterventionApi.dll --migrate   # (non implemente)
+# En pratique : `dotnet ef database update` depuis un poste, ou le script
+# deploy/appliquer-migrations.sh.
+
+name: techmaint
+
+services:
+  techmaint-api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: techmaint-api:socle
+    restart: unless-stopped
+    env_file:
+      - ./techmaint.env
+    networks: [socle]
+    # Aucun port publie : Caddy joint le conteneur par le reseau interne.
+    healthcheck:
+      # L'API n'expose pas de /health : /api/clients repond 401 sans jeton, ce
+      # qui prouve exactement ce qu'un healthcheck doit prouver — le processus
+      # ecoute, le pipeline ASP.NET repond, l'authentification est branchee.
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/clients | grep -q 401"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+networks:
+  socle:
+    external: true

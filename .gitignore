@@ -72,3 +72,7 @@ publish-deploy/
 # Scripts de zip-deploy Azure, ecrits a la main pour un App Service qui n'existe plus
 mkzip.py
 zip_deploy.py
+
+# Secrets de deploiement — jamais dans le depot
+deploy/*.env
+!deploy/*.env.example

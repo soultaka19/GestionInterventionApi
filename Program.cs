@@ -202,6 +202,29 @@ builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
+// ---------------------------------------------------------------------------
+// Migrations au demarrage, sur demande explicite.
+//
+// L'image ne connait pas `dotnet ef` (l'outil vit dans le SDK, pas dans le
+// runtime) : sans ce bloc, chaque deploiement exigerait un geste manuel depuis
+// un poste ayant acces a la base — c'est-a-dire, en pratique, un schema qui
+// derive un jour ou l'autre.
+//
+// Sous condition, jamais par defaut : appliquer des migrations est une ecriture
+// de schema, elle doit etre voulue. RUN_MIGRATIONS_ON_BOOT=true dans la pile de
+// deploiement ; absente en developpement, ou l'on veut garder la main.
+if (string.Equals(builder.Configuration["RUN_MIGRATIONS_ON_BOOT"], "true",
+                  StringComparison.OrdinalIgnoreCase))
+{
+    using var portee = app.Services.CreateScope();
+    var contexte = portee.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    var journal = portee.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    journal.LogInformation("Application des migrations en attente…");
+    await contexte.Database.MigrateAsync();
+    journal.LogInformation("Schema a jour.");
+}
+
 // Le gestionnaire d'exceptions doit etre le PREMIER middleware du pipeline :
 // il n'attrape que ce qui remonte des middlewares places apres lui.
 app.UseExceptionHandler();
