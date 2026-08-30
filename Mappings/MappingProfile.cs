@@ -1,4 +1,4 @@
-using AutoMapper;
+﻿using AutoMapper;
 using GestionInterventionApi.DTOs.Organization;
 using GestionInterventionApi.DTOs.User;
 using GestionInterventionApi.DTOs.Client;
@@ -30,12 +30,27 @@ public class MappingProfile : Profile
         CreateMap<Client, ClientDetailDto>();
 
         CreateMap<CreateClientDto, Client>();
-        CreateMap<UpdateClientDto, Client>();
+
+        // B-7 — une mise a jour n'ecrase pas un champ absent.
+        //
+        // `_mapper.Map(updateDto, client)` recopiait TOUS les membres du DTO sur
+        // l'entite chargee, y compris ceux laisses a null. Le front n'envoyant
+        // qu'une partie des champs, un simple changement de nom effacait au
+        // passage ville, code postal, telephone, coordonnees et notes — sans
+        // aucune erreur, la perte n'etant visible qu'au rechargement.
+        //
+        // Contrepartie assumee : un champ optionnel ne peut plus etre VIDE en
+        // envoyant null ; il faut envoyer une chaine vide. Perdre la capacite
+        // d'effacer coute moins cher que d'effacer par accident.
+        CreateMap<UpdateClientDto, Client>()
+            .ForAllMembers(opt => opt.Condition((_, _, valeurSource) => valeurSource != null));
 
         // Equipment
         CreateMap<Equipment, EquipmentDto>()
             .ForMember(dest => dest.ClientName, opt => opt.MapFrom(src => src.Client.Name));
         CreateMap<CreateEquipmentDto, Equipment>();
-        CreateMap<UpdateEquipmentDto, Equipment>();
+        // Meme raison que pour UpdateClientDto ci-dessus (B-7).
+        CreateMap<UpdateEquipmentDto, Equipment>()
+            .ForAllMembers(opt => opt.Condition((_, _, valeurSource) => valeurSource != null));
     }
 }

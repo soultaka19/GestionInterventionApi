@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using GestionInterventionApi.DTOs.Location;
 
 namespace GestionInterventionApi.Services;
@@ -74,7 +74,10 @@ public class GeocodingService : IGeocodingService
 
         try
         {
-            var url = $"https://maps.googleapis.com/maps/api/geocode/json?latlng={latitude},{longitude}&key={apiKey}";
+            // B-9 : invariant obligatoire — en fr-CA, `{latitude},{longitude}`
+            // produirait « 45,42,-75,69 » et Google renverrait ZERO_RESULTS.
+            var latlng = FormattableString.Invariant($"{latitude},{longitude}");
+            var url = $"https://maps.googleapis.com/maps/api/geocode/json?latlng={latlng}&key={apiKey}";
 
             var response = await _httpClient.GetAsync(url);
             response.EnsureSuccessStatusCode();

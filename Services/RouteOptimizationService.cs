@@ -1,10 +1,23 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using GestionInterventionApi.DTOs.Location;
 
 namespace GestionInterventionApi.Services;
 
 public class RouteOptimizationService : IRouteOptimizationService
 {
+    /// <summary>
+    /// Formate un couple de coordonnees pour une URL Google.
+    ///
+    /// B-9 : l'interpolation `$"{latitude},{longitude}"` utilise la culture
+    /// COURANTE du serveur. En fr-CA ou fr-FR, le separateur decimal est la
+    /// virgule : 45.42 devient « 45,42 » et l'URL recoit « 45,42,-75,69 »,
+    /// que Google interprete comme quatre nombres. Le service tombait alors en
+    /// repli silencieux (distance a vol d'oiseau) sans qu'aucune erreur
+    /// n'apparaisse. Invariant, le point reste un point.
+    /// </summary>
+    private static string Coordonnees(double latitude, double longitude) =>
+        FormattableString.Invariant($"{latitude},{longitude}");
+
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<RouteOptimizationService> _logger;
@@ -28,12 +41,12 @@ public class RouteOptimizationService : IRouteOptimizationService
 
         try
         {
-            var origin = $"{request.Origin.Latitude},{request.Origin.Longitude}";
+            var origin = Coordonnees(request.Origin.Latitude, request.Origin.Longitude);
             var destination = request.Destination != null
-                ? $"{request.Destination.Latitude},{request.Destination.Longitude}"
+                ? Coordonnees(request.Destination.Latitude, request.Destination.Longitude)
                 : origin; // Retour au point de départ si pas de destination
 
-            var waypoints = string.Join("|", request.Waypoints.Select(w => $"{w.Latitude},{w.Longitude}"));
+            var waypoints = string.Join("|", request.Waypoints.Select(w => Coordonnees(w.Latitude, w.Longitude)));
 
             var url = $"https://maps.googleapis.com/maps/api/directions/json?" +
                       $"origin={origin}&destination={destination}" +

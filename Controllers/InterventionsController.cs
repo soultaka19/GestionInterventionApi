@@ -276,7 +276,7 @@ public class InterventionsController : ControllerBase
 
     [HttpPost("{id:guid}/cancel")]
     [Authorize(Policy = "Gestion")]
-    public async Task<ActionResult<InterventionDto>> CancelIntervention(Guid id, [FromBody] string? reason = null)
+    public async Task<ActionResult<InterventionDto>> CancelIntervention(Guid id, [FromBody] CancelInterventionDto? corps = null)
     {
         var intervention = await _context.Interventions
             .Include(i => i.Client)
@@ -291,6 +291,7 @@ public class InterventionsController : ControllerBase
             return BadRequest(new { message = "Impossible d'annuler une intervention terminée" });
 
         intervention.Status = InterventionStatus.Cancelled;
+        var reason = corps?.Reason;
         if (!string.IsNullOrEmpty(reason))
             intervention.Notes = (intervention.Notes ?? "") + $"\n[Annulation] {reason}";
 

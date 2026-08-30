@@ -144,8 +144,17 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 
 // Services Géolocalisation
 builder.Services.AddScoped<ILocationTrackingService, LocationTrackingService>();
-builder.Services.AddHttpClient<IGeocodingService, GeocodingService>();
-builder.Services.AddHttpClient<IRouteOptimizationService, RouteOptimizationService>();
+// B-10 — delai d'attente explicite sur les appels sortants vers Google.
+//
+// Le defaut de HttpClient est de 100 secondes. Une API Google lente ou
+// injoignable immobilisait donc une requete utilisateur pendant plus d'une
+// minute et demie, et autant de threads que d'appels simultanes. 10 secondes
+// suffisent largement pour du geocodage ; au-dela, le repli (distance a vol
+// d'oiseau) vaut mieux qu'une attente.
+builder.Services.AddHttpClient<IGeocodingService, GeocodingService>(
+    c => c.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddHttpClient<IRouteOptimizationService, RouteOptimizationService>(
+    c => c.Timeout = TimeSpan.FromSeconds(10));
 
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(Program).Assembly);
@@ -181,7 +190,15 @@ builder.Services.AddCors(options =>
     });
 });
 
+// B-8 — gestion globale des exceptions (voir Middleware/GestionnaireExceptions.cs).
+builder.Services.AddExceptionHandler<GestionnaireExceptions>();
+builder.Services.AddProblemDetails();
+
 var app = builder.Build();
+
+// Le gestionnaire d'exceptions doit etre le PREMIER middleware du pipeline :
+// il n'attrape que ce qui remonte des middlewares places apres lui.
+app.UseExceptionHandler();
 
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
