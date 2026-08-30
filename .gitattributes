@@ -25,3 +25,8 @@ Dockerfile text eol=lf
 *.woff2 binary
 *.ttf binary
 *.eot binary
+
+# Sources .NET — `diff=csharp` donne a git des en-tetes de hunk lisibles
+*.cs   text diff=csharp
+*.csproj text
+*.slnx text

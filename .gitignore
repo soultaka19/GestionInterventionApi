@@ -63,3 +63,12 @@ appsettings.Development.json
 
 # Secrets
 secrets.json
+
+# Artefacts de publication Azure (63 Mo) — superseded par le deploiement Docker
+publish/
+publish-deploy/
+*.zip
+
+# Scripts de zip-deploy Azure, ecrits a la main pour un App Service qui n'existe plus
+mkzip.py
+zip_deploy.py
