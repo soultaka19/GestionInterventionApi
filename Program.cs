@@ -156,8 +156,14 @@ builder.Services.AddHttpClient<IGeocodingService, GeocodingService>(
 builder.Services.AddHttpClient<IRouteOptimizationService, RouteOptimizationService>(
     c => c.Timeout = TimeSpan.FromSeconds(10));
 
-// AutoMapper
-builder.Services.AddAutoMapper(typeof(Program).Assembly);
+// AutoMapper 16.
+//
+// La version 12.0.1 portait un avis de securite de gravite elevee
+// (GHSA-rvv3-g6hj-g44x) et son paquet compagnon
+// AutoMapper.Extensions.Microsoft.DependencyInjection est abandonne : depuis la
+// version 13, l'enregistrement DI vit dans le paquet principal. La signature a
+// change au passage — la configuration se declare maintenant explicitement.
+builder.Services.AddAutoMapper(cfg => cfg.AddMaps(typeof(Program).Assembly));
 
 // FluentValidation
 builder.Services.AddFluentValidationAutoValidation();
