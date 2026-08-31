@@ -125,7 +125,11 @@ public class AuthService : IAuthService
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    private static string HashPassword(string password)
+    // Publique parce que DemoService cree les comptes du bac a sable sans passer
+    // par RegisterAsync : il en cree trois d'un coup, dans une organisation deja
+    // construite. Le hachage doit rester le meme que celui de l'inscription
+    // normale, sinon ces comptes ne pourraient pas se connecter.
+    public static string HashPassword(string password)
     {
         var salt = RandomNumberGenerator.GetBytes(16);
         var hash = Rfc2898DeriveBytes.Pbkdf2(

@@ -1,4 +1,7 @@
 ﻿using System.Text;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -142,6 +145,45 @@ builder.Services.AddScoped<ITenantService, TenantService>();
 // Services Application
 builder.Services.AddScoped<IAuthService, AuthService>();
 
+// Demonstration publique : bacs a sable jetables et leur purge.
+builder.Services.AddScoped<IDemoService, DemoService>();
+builder.Services.AddHostedService<DemoCleanupService>();
+
+// L'API ne publie aucun port : en production, seul Caddy peut l'atteindre. Sans
+// ce middleware, RemoteIpAddress vaut l'adresse de la passerelle Docker, la meme
+// pour tout le monde — et la limitation « par visiteur » ci-dessous deviendrait
+// une limitation globale, sans que rien ne le signale.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // Le reseau Docker attribue les adresses dynamiquement : on ne peut pas
+    // enumerer le mandataire. C'est acceptable ici, et seulement ici, parce que
+    // le conteneur est inatteignable autrement que par Caddy.
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+// Creation de bacs a sable : par defaut 3 par tranche de 10 minutes et par
+// adresse IP. Assez pour qu'un visiteur recommence s'il se trompe, trop peu
+// pour qu'un robot remplisse la base. Reglable sans recompiler
+// (Demo__RateLimitPermits, Demo__RateLimitWindowMinutes).
+var demoPermis = builder.Configuration.GetValue("Demo:RateLimitPermits", 3);
+var demoFenetre = builder.Configuration.GetValue("Demo:RateLimitWindowMinutes", 10);
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy("demo", contexte => RateLimitPartition.GetFixedWindowLimiter(
+        partitionKey: contexte.Connection.RemoteIpAddress?.ToString() ?? "inconnu",
+        factory: _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = demoPermis,
+            Window = TimeSpan.FromMinutes(demoFenetre),
+            QueueLimit = 0
+        }));
+});
+
 // Services Géolocalisation
 builder.Services.AddScoped<ILocationTrackingService, LocationTrackingService>();
 // B-10 — delai d'attente explicite sur les appels sortants vers Google.
@@ -225,6 +267,10 @@ if (string.Equals(builder.Configuration["RUN_MIGRATIONS_ON_BOOT"], "true",
     journal.LogInformation("Schema a jour.");
 }
 
+// Doit preceder tout ce qui lit l'adresse du client (journalisation comprise),
+// sinon chacun voit l'adresse de la passerelle Docker au lieu du visiteur.
+app.UseForwardedHeaders();
+
 // Le gestionnaire d'exceptions doit etre le PREMIER middleware du pipeline :
 // il n'attrape que ce qui remonte des middlewares places apres lui.
 app.UseExceptionHandler();
@@ -242,6 +288,8 @@ app.UseSerilogRequestLogging();
 app.UseHttpsRedirection();
 
 app.UseCors("SignalRPolicy");
+
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();
