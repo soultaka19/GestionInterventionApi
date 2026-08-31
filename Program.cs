@@ -162,15 +162,14 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
 
-    // Ne PAS compter sur ce middleware pour identifier le visiteur : il depile
-    // depuis la droite et s'arrete au premier en-tete qui manque d'un element.
-    // Caddy allonge X-Forwarded-For sans allonger X-Forwarded-Proto, donc un
-    // seul cran est depile — celui de l'edge Vercel, dont l'adresse alterne.
-    // Mesure du 31 aout 2026 : monter ForwardLimit n'y change rien.
-    // La cle de limitation est derivee a part, voir AdresseDuVisiteur.
+    // Ne PAS compter sur ce middleware pour identifier le visiteur venu par le
+    // front : Caddy remplace X-Forwarded-For par l'adresse de l'edge Vercel
+    // (mesure du 31 aout 2026), donc il n'y a plus rien a depiler. La cle de
+    // limitation est derivee a part, voir AdresseDuVisiteur.
     //
     // Ce middleware reste utile pour X-Forwarded-Proto : sans lui, Kestrel voit
-    // du HTTP et UseHttpsRedirection boucle.
+    // du HTTP et UseHttpsRedirection boucle. Il donne aussi la bonne adresse
+    // sur les appels directs au domaine de l'API.
 });
 
 // Creation de bacs a sable : par defaut 3 par tranche de 10 minutes et par
@@ -184,30 +183,40 @@ var demoFenetre = builder.Configuration.GetValue("Demo:RateLimitWindowMinutes", 
 //
 // Mesure du 31 aout 2026. La chaine de production est :
 //   visiteur -> edge Vercel -> Caddy -> ce conteneur
-// Vercel transmet l'adresse du visiteur, Caddy ajoute celle de l'edge Vercel
-// qu'il a vu. Or l'adresse de cet edge ALTERNE d'une requete a l'autre
-// (35.182.251.83 / 15.156.206.244 observees) : toute cle de partition qui la
-// retient change a chaque appel, et la limitation ne compte plus rien.
 //
-// UseForwardedHeaders ne suffit pas a le corriger. Il depile depuis la DROITE,
-// et surtout il s'arrete des que l'un des en-tetes demandes manque d'un
-// element : Caddy allonge X-Forwarded-For sans allonger X-Forwarded-Proto, donc
-// un seul cran est depile quel que soit ForwardLimit. On lit donc l'en-tete
-// nous-memes, ce qui ne depend d'aucun reglage de middleware.
+// Vercel transmet bien l'adresse du visiteur, mais CADDY LA DETRUIT : sans
+// `trusted_proxies` configure, il considere son interlocuteur direct comme le
+// client et REMPLACE X-Forwarded-For par l'adresse de l'edge Vercel. Le
+// conteneur recoit donc « X-Forwarded-For: <edge Vercel> » — et cette adresse
+// alterne d'une requete a l'autre (35.182.251.83, 15.156.206.244, 3.96.159.140
+// observees). Chaque requete tombait dans un compteur different : cinq
+// creations de bac a sable d'affilee passaient toutes, alors que la limite est
+// de trois. Le defaut ne se voyait qu'a travers Vercel, jamais en appelant
+// l'API directement — c'est-a-dire jamais sur le chemin d'un vrai visiteur.
 //
-// Les deux chemins sont couverts :
-//   - via Vercel : apres depilement il reste « <visiteur> » -> premier element
-//   - en direct  : l'en-tete a ete entierement consomme -> RemoteIpAddress
+// X-Vercel-Forwarded-For est en revanche transmis tel quel par Caddy, qui ne le
+// connait pas. C'est donc lui qui porte l'adresse du visiteur.
+//
+// Ordre retenu :
+//   1. X-Vercel-Forwarded-For — chemin reel du visiteur, via le front
+//   2. premier element de X-Forwarded-For — appel direct sur le domaine de
+//      l'API, ou Caddy y met la vraie adresse du client
+//   3. RemoteIpAddress, en dernier recours
 //
 // Limite assumee : sur le domaine de l'API, joignable sans passer par Vercel,
-// un appelant peut forger cet en-tete et se donner une adresse par requete. Le
+// un appelant peut forger ces en-tetes et se donner une adresse par requete. Le
 // garde-fou qui tient alors est le plafond de bacs a sable vivants, qui ne
 // depend d'aucun en-tete.
 static string AdresseDuVisiteur(HttpContext contexte)
 {
-    var entete = contexte.Request.Headers["X-Forwarded-For"].ToString();
-    if (!string.IsNullOrWhiteSpace(entete))
+    foreach (var nom in new[] { "X-Vercel-Forwarded-For", "X-Forwarded-For" })
     {
+        var entete = contexte.Request.Headers[nom].ToString();
+        if (string.IsNullOrWhiteSpace(entete))
+        {
+            continue;
+        }
+
         var premier = entete.Split(',')[0].Trim();
         if (premier.Length > 0)
         {
