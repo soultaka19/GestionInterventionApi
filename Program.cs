@@ -161,6 +161,31 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     // le conteneur est inatteignable autrement que par Caddy.
     options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
+
+    // Remonter TOUTE la chaine, pas seulement le dernier relais.
+    //
+    // Mesure du 31 aout 2026. En production la chaine est :
+    //   visiteur -> edge Vercel -> Caddy -> ce conteneur
+    // Vercel transmet correctement l'adresse du visiteur, puis Caddy ajoute
+    // celle de l'edge Vercel qu'il a vu. Le conteneur recoit donc
+    // « X-Forwarded-For: <visiteur>, <edge Vercel> ».
+    //
+    // ForwardLimit vaut 1 par defaut : ASP.NET ne depile que l'element de
+    // DROITE, donc l'adresse de l'edge Vercel — et celle-ci ALTERNE d'une
+    // requete a l'autre (35.182.251.83 / 15.156.206.244 observees). La
+    // limitation « par visiteur » changeait ainsi de compteur a chaque appel :
+    // cinq creations de bac a sable d'affilee passaient toutes, alors que la
+    // limite est de trois. Le defaut ne se voyait qu'a travers Vercel, jamais
+    // en appelant l'API directement.
+    //
+    // Avec null, la chaine est depilee entierement et RemoteIpAddress designe
+    // le visiteur, par les deux chemins.
+    //
+    // Limite assumee : sur le domaine de l'API, joignable sans passer par
+    // Vercel, un appelant peut forger cet en-tete et se donner une adresse par
+    // requete. Le garde-fou qui tient alors est le plafond de bacs a sable
+    // vivants, qui ne depend d'aucun en-tete.
+    options.ForwardLimit = null;
 });
 
 // Creation de bacs a sable : par defaut 3 par tranche de 10 minutes et par
